@@ -16,17 +16,32 @@ function getAnthropic(): Anthropic {
 fal.config({ credentials: process.env.FAL_KEY })
 
 /**
+ * Map the text medium to a visual art direction for image generation.
+ * The medium (comic strip, prose, timeline) implies a visual style.
+ * The symbolic language is handled by Claude in the visual_header text.
+ */
+function artDirectionForMedium(medium: string): string {
+  const key = medium.toLowerCase()
+  if (key.includes('comic')) return 'Graphic novel panel, single scene, bold ink lines, limited color palette, dramatic lighting.'
+  if (key.includes('timeline')) return 'Editorial illustration, single scene, clean composition, muted earth tones, atmospheric.'
+  if (key.includes('infographic')) return 'Stylized icon illustration, flat design, geometric shapes, cohesive color system.'
+  // Default (prose): painterly illustration
+  return 'Painterly illustration, single scene, expressive brushwork, atmospheric lighting, muted palette.'
+}
+
+/**
  * Generate an image using Flux Kontext Pro via fal.ai.
  * If a referenceUrl is provided, Kontext uses it as a style reference
  * so all images in the artifact share a consistent visual identity.
  */
 async function generateImage(
   prompt: string,
-  style: string,
+  medium: string,
   referenceUrl?: string
 ): Promise<string | null> {
   try {
-    const artPrompt = `Fine art illustration in ${style} style. No text, no words, no letters. No photorealistic human faces. Symbolic, evocative figures. The scene: ${prompt}`
+    const artDirection = artDirectionForMedium(medium)
+    const artPrompt = `${artDirection} No text, no words, no lettering. ${prompt}`
 
     if (referenceUrl) {
       // Use Kontext for style-consistent follow-up images
@@ -241,7 +256,7 @@ export async function POST(request: Request) {
 
   // Generate images: hero image first, then style-consistent follow-ups via Kontext
   const serviceClient = await createServiceClient()
-  const imageStyle = `${symbolic_language || 'minimalist'}, ${medium || 'artistic illustration'}`
+  const artifactMedium = medium || 'prose'
   const imageUrls: (string | null)[] = []
   let heroUrl: string | null = null
 
@@ -254,7 +269,7 @@ export async function POST(request: Request) {
 
     // First image with a visual_header becomes the hero (no reference).
     // Subsequent images use the hero as a style reference via Kontext.
-    const falUrl = await generateImage(section.visual_header, imageStyle, heroUrl ?? undefined)
+    const falUrl = await generateImage(section.visual_header, artifactMedium, heroUrl ?? undefined)
     if (!falUrl) {
       imageUrls.push(null)
       continue
