@@ -86,6 +86,8 @@ export function GenerateArtifactClient({
     if (res.ok) {
       router.push(`/containers/${containerId}/artifact`)
     } else {
+      const err = await res.json().catch(() => ({ error: 'Generation failed' }))
+      alert(err.error || 'Generation failed')
       setGenerating(false)
     }
   }
