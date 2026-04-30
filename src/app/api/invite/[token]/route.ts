@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(
@@ -18,14 +18,23 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid invite' }, { status: 404 })
   }
 
-  return NextResponse.json(data)
+  // Don't expose email or container_id to unauthenticated callers
+  return NextResponse.json({ valid: true, accepted: data.accepted })
 }
 
 export async function POST(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
+
+  // Get authenticated user from session
+  const authClient = await createClient()
+  const { data: { user } } = await authClient.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Must be signed in to accept invite' }, { status: 401 })
+  }
+
   const supabase = await createServiceClient()
 
   const { data: invite, error: inviteError } = await supabase
@@ -42,19 +51,16 @@ export async function POST(
     return NextResponse.json({ error: 'Already accepted' }, { status: 400 })
   }
 
-  const body = await request.json()
-  const { user_id } = body
-
   // Update invite
   await supabase
     .from('invites')
     .update({ accepted: true })
     .eq('token', token)
 
-  // Assign client to container and activate
+  // Assign authenticated user as client on container
   await supabase
     .from('containers')
-    .update({ client_id: user_id, status: 'active' })
+    .update({ client_id: user.id, status: 'active' })
     .eq('id', invite.container_id)
 
   return NextResponse.json({ success: true, container_id: invite.container_id })

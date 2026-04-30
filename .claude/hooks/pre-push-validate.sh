@@ -9,10 +9,12 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 cd "$PROJECT_DIR"
 
 # ---- Bypass: config-only commits (hooks, settings, docs) skip team review ----
-CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null || true)
-NON_CONFIG=$(echo "$CHANGED_FILES" | grep -vE "^\.claude/|^docs/|^README|^CLAUDE" || true)
+# Check all unpushed commits, plus any uncommitted changes
+CHANGED_FILES=$(git log origin/main..HEAD --name-only --pretty=format: 2>/dev/null | sort -u || true)
+CHANGED_FILES="$CHANGED_FILES$(git diff HEAD --name-only 2>/dev/null || true)"
+NON_CONFIG=$(echo "$CHANGED_FILES" | grep -v '^$' | grep -vE "^\.claude/|^docs/|^README|^CLAUDE|^\.gitignore" || true)
 if [ -z "$NON_CONFIG" ]; then
-  # Only config/docs changed, skip team review gate (but still run build)
+  # Only config/docs changed, skip all gates
   exit 0
 fi
 

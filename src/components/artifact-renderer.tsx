@@ -79,7 +79,7 @@ function ComicStripRenderer({ content }: { content: ArtifactContent }) {
 
             {/* Quote as dialogue */}
             {section.quotes_used?.length > 0 && (
-              <blockquote className="border-l-3 pl-3 my-3" style={{ borderColor: section.accent_color || '#a8a29e' }}>
+              <blockquote className="border-l-2 pl-3 my-3" style={{ borderColor: section.accent_color || '#a8a29e' }}>
                 <p className="text-stone-800 font-medium text-lg">
                   &ldquo;{section.quotes_used[0]}&rdquo;
                 </p>

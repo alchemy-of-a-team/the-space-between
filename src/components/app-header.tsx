@@ -1,18 +1,17 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
-export function AppHeader({ userName }: { userName: string }) {
-  const supabase = createClient()
+export function AppHeader({ userName, role }: { userName: string; role?: string }) {
   const router = useRouter()
 
   async function handleSignOut() {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
+    window.location.href = '/'
   }
 
   async function handleBilling() {
@@ -20,6 +19,8 @@ export function AppHeader({ userName }: { userName: string }) {
     const { url } = await res.json()
     if (url) window.location.href = url
   }
+
+  const isCoach = role === 'coach' || role === 'admin'
 
   return (
     <header className="border-b border-stone-200 bg-white">
@@ -29,9 +30,11 @@ export function AppHeader({ userName }: { userName: string }) {
         </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-stone-500">{userName}</span>
-          <Button variant="ghost" size="sm" onClick={handleBilling}>
-            Billing
-          </Button>
+          {isCoach && (
+            <Button variant="ghost" size="sm" onClick={handleBilling}>
+              Billing
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={handleSignOut}>
             Sign out
           </Button>

@@ -92,7 +92,7 @@ export function DashboardClient({ profile }: { profile: Profile }) {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <AppHeader userName={profile.full_name} />
+      <AppHeader userName={profile.full_name} role={profile.role} />
       <main className="max-w-3xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-serif text-stone-800">
@@ -164,7 +164,7 @@ export function DashboardClient({ profile }: { profile: Profile }) {
                               {container.title || (isCoach ? clientName || 'Awaiting client' : coachName || 'Unknown coach')}
                             </h2>
                             <Badge variant="secondary" className={statusColors[container.status]}>
-                              {container.status}
+                              {({ invited: 'Awaiting client', active: 'Active', closing: 'Winding down', closed: 'Complete' } as Record<string, string>)[container.status] || container.status}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 mt-1">

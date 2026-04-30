@@ -7,8 +7,22 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import type { Profile, Container, Entry } from '@/lib/types'
+
+const STATUS_LABELS: Record<string, string> = {
+  invited: 'Awaiting client',
+  active: 'Active',
+  closing: 'Winding down',
+  closed: 'Complete',
+}
 
 export function SharedSpaceClient({
   container,
@@ -21,6 +35,8 @@ export function SharedSpaceClient({
   const [newEntry, setNewEntry] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState(container.status)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   // Reflection fields (coach only)
   const [showReflection, setShowReflection] = useState(false)
@@ -45,16 +61,22 @@ export function SharedSpaceClient({
     if (!newEntry.trim()) return
     setSubmitting(true)
 
-    const res = await fetch('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ container_id: container.id, content: newEntry }),
-    })
+    try {
+      const res = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ container_id: container.id, content: newEntry }),
+      })
 
-    if (res.ok) {
-      const entry = await res.json()
-      setEntries(prev => [...prev, entry])
-      setNewEntry('')
+      if (res.ok) {
+        const entry = await res.json()
+        setEntries(prev => [...prev, entry])
+        setNewEntry('')
+      } else {
+        toast.error('Failed to send entry. Please try again.')
+      }
+    } catch {
+      toast.error('Network error. Please try again.')
     }
     setSubmitting(false)
   }
@@ -63,32 +85,50 @@ export function SharedSpaceClient({
     if (!whatShifted.trim() && !whatUnnamed.trim() && !compoundNow.trim()) return
     setSavingReflection(true)
 
-    const res = await fetch('/api/reflections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        container_id: container.id,
-        what_shifted: whatShifted,
-        what_unnamed: whatUnnamed,
-        compound_question_now: compoundNow,
-      }),
-    })
+    try {
+      const res = await fetch('/api/reflections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          container_id: container.id,
+          what_shifted: whatShifted,
+          what_unnamed: whatUnnamed,
+          compound_question_now: compoundNow,
+        }),
+      })
 
-    if (res.ok) {
-      setWhatShifted('')
-      setWhatUnnamed('')
-      setCompoundNow('')
-      setShowReflection(false)
+      if (res.ok) {
+        setWhatShifted('')
+        setWhatUnnamed('')
+        setCompoundNow('')
+        setShowReflection(false)
+        toast.success('Reflection saved.')
+      } else {
+        toast.error('Failed to save reflection. Please try again.')
+      }
+    } catch {
+      toast.error('Network error. Your reflection was not saved.')
     }
     setSavingReflection(false)
   }
 
-  function handleCloseEngagement() {
-    fetch(`/api/containers/${container.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'closed' }),
-    })
+  async function handleCloseEngagement() {
+    try {
+      const res = await fetch(`/api/containers/${container.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'closed' }),
+      })
+      if (res.ok) {
+        setStatus('closed')
+        setShowCloseConfirm(false)
+        toast.success('Engagement closed.')
+      } else {
+        toast.error('Failed to close engagement.')
+      }
+    } catch {
+      toast.error('Network error.')
+    }
   }
 
   const coachName = (container.coach as unknown as Profile)?.full_name
@@ -96,8 +136,13 @@ export function SharedSpaceClient({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <AppHeader userName={profile.full_name} />
+      <AppHeader userName={profile.full_name} role={profile.role} />
       <main className="max-w-2xl mx-auto px-6 py-10">
+        {/* Back link */}
+        <Link href="/dashboard" className="text-sm text-stone-400 hover:text-stone-600 mb-6 block">
+          &larr; Back to dashboard
+        </Link>
+
         {/* Compound question */}
         <div className="bg-white border border-stone-200 rounded-lg p-6 mb-8">
           <p className="text-lg font-serif text-stone-700 text-center italic">
@@ -105,28 +150,40 @@ export function SharedSpaceClient({
           </p>
         </div>
 
-        {/* Container metadata */}
+        {/* Metadata */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3 text-sm text-stone-500">
             {container.title && <span className="font-medium text-stone-700">{container.title}</span>}
             <span>{coachName} &amp; {clientName || 'awaiting client'}</span>
-            <Badge variant="secondary">{container.status}</Badge>
+            <Badge variant="secondary">{STATUS_LABELS[status] || status}</Badge>
           </div>
           <div className="flex items-center gap-2">
             <Link href={`/containers/${container.id}/artifact`}>
               <Button variant="outline" size="sm">View artifact</Button>
             </Link>
-            {isCoach && container.status === 'active' && (
-              <Button variant="ghost" size="sm" onClick={handleCloseEngagement}>
+            {isCoach && status === 'active' && (
+              <Button variant="ghost" size="sm" onClick={() => setShowCloseConfirm(true)}>
                 Close
               </Button>
             )}
           </div>
         </div>
 
-        <Link href="/dashboard" className="text-sm text-stone-400 hover:text-stone-600 mb-6 block">
-          &larr; Back to dashboard
-        </Link>
+        {/* Close confirmation dialog */}
+        <Dialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-serif">Close this engagement?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-stone-600 mt-2">
+              This will close the shared space. Neither you nor your client will be able to add new entries. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="ghost" onClick={() => setShowCloseConfirm(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleCloseEngagement}>Close engagement</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Entries */}
         <div className="space-y-4 mb-8">
@@ -167,7 +224,7 @@ export function SharedSpaceClient({
         </div>
 
         {/* Write box */}
-        {container.status !== 'closed' && (
+        {status !== 'closed' && (
           <div className="space-y-3">
             <Textarea
               value={newEntry}
@@ -184,7 +241,7 @@ export function SharedSpaceClient({
         )}
 
         {/* Coach reflection prompt */}
-        {isCoach && container.status !== 'closed' && (
+        {isCoach && status !== 'closed' && (
           <>
             <Separator className="my-8" />
             <div>
@@ -203,10 +260,11 @@ export function SharedSpaceClient({
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-stone-600">What shifted?</label>
+                      <label htmlFor="what-shifted" className="text-sm font-medium text-stone-600">What shifted?</label>
                       <VoiceRecorder onTranscript={(t) => setWhatShifted(prev => prev ? `${prev} ${t}` : t)} />
                     </div>
                     <Textarea
+                      id="what-shifted"
                       value={whatShifted}
                       onChange={(e) => setWhatShifted(e.target.value)}
                       className="min-h-[80px] bg-white resize-none text-sm"
@@ -215,12 +273,13 @@ export function SharedSpaceClient({
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-stone-600">
+                      <label htmlFor="what-unnamed" className="text-sm font-medium text-stone-600">
                         What did you notice that the client hasn&apos;t named yet?
                       </label>
                       <VoiceRecorder onTranscript={(t) => setWhatUnnamed(prev => prev ? `${prev} ${t}` : t)} />
                     </div>
                     <Textarea
+                      id="what-unnamed"
                       value={whatUnnamed}
                       onChange={(e) => setWhatUnnamed(e.target.value)}
                       className="min-h-[80px] bg-white resize-none text-sm"
@@ -229,12 +288,13 @@ export function SharedSpaceClient({
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-stone-600">
+                      <label htmlFor="compound-now" className="text-sm font-medium text-stone-600">
                         Where is the compound question now?
                       </label>
                       <VoiceRecorder onTranscript={(t) => setCompoundNow(prev => prev ? `${prev} ${t}` : t)} />
                     </div>
                     <Textarea
+                      id="compound-now"
                       value={compoundNow}
                       onChange={(e) => setCompoundNow(e.target.value)}
                       className="min-h-[80px] bg-white resize-none text-sm"

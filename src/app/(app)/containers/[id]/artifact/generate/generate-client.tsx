@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app-header'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -87,7 +88,7 @@ export function GenerateArtifactClient({
       router.push(`/containers/${containerId}/artifact`)
     } else {
       const err = await res.json().catch(() => ({ error: 'Generation failed' }))
-      alert(err.error || 'Generation failed')
+      toast.error(err.error || 'Generation failed')
       setGenerating(false)
     }
   }
@@ -96,7 +97,7 @@ export function GenerateArtifactClient({
   if (!isCoach) {
     return (
       <div className="min-h-screen bg-stone-50">
-        <AppHeader userName={profile.full_name} />
+        <AppHeader userName={profile.full_name} role={profile.role} />
         <main className="max-w-2xl mx-auto px-6 py-10">
           <Link href={`/containers/${containerId}/artifact`} className="text-sm text-stone-400 hover:text-stone-600 mb-8 block">
             &larr; Back to artifact
@@ -117,7 +118,7 @@ export function GenerateArtifactClient({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <AppHeader userName={profile.full_name} />
+      <AppHeader userName={profile.full_name} role={profile.role} />
       <main className="max-w-2xl mx-auto px-6 py-10">
         <Link href={`/containers/${containerId}/artifact`} className="text-sm text-stone-400 hover:text-stone-600 mb-8 block">
           &larr; Back to artifact

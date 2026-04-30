@@ -2,65 +2,53 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>()
   const router = useRouter()
-  const supabase = createClient()
-  const [invite, setInvite] = useState<{ email: string; container_id: string } | null>(null)
+  const [valid, setValid] = useState(false)
   const [loading, setLoading] = useState(true)
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function checkInvite() {
-      const { data, error } = await supabase
-        .from('invites')
-        .select('email, container_id, accepted')
-        .eq('token', token)
-        .single()
-
-      if (error || !data) {
+      const res = await fetch(`/api/invite/${token}`)
+      if (!res.ok) {
         setError('This invite link is not valid.')
         setLoading(false)
         return
       }
-
+      const data = await res.json()
       if (data.accepted) {
         setError('This invite has already been accepted.')
         setLoading(false)
         return
       }
-
-      setInvite({ email: data.email, container_id: data.container_id })
+      setValid(true)
       setLoading(false)
     }
     checkInvite()
-  }, [token, supabase])
+  }, [token])
 
   async function handleAccept() {
     setAccepting(true)
-    const { data: { user } } = await supabase.auth.getUser()
 
-    if (user) {
-      // Already logged in, accept directly
-      const res = await fetch(`/api/invite/${token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id }),
-      })
-      if (res.ok) {
-        router.push(`/containers/${invite!.container_id}`)
-      } else {
-        setError('Failed to accept invite')
-        setAccepting(false)
-      }
-    } else {
-      // Not logged in, redirect to client signup with token
+    // Try accepting directly (will work if user is already signed in)
+    const res = await fetch(`/api/invite/${token}`, { method: 'POST' })
+
+    if (res.ok) {
+      const { container_id } = await res.json()
+      window.location.href = `/containers/${container_id}`
+    } else if (res.status === 401) {
+      // Not signed in, redirect to client signup
       router.push(`/signup/client?token=${token}`)
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Failed to accept invite' }))
+      setError(err.error)
+      setAccepting(false)
     }
   }
 

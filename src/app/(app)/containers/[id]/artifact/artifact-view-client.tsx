@@ -35,7 +35,7 @@ export function ArtifactViewClient({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <AppHeader userName={profile.full_name} />
+      <AppHeader userName={profile.full_name} role={profile.role} />
       <main className="max-w-3xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <Link href={`/containers/${containerId}`} className="text-sm text-stone-400 hover:text-stone-600">

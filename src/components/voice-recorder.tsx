@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void
@@ -14,37 +15,47 @@ export function VoiceRecorder({ onTranscript }: VoiceRecorderProps) {
   const chunksRef = useRef<Blob[]>([])
 
   async function startRecording() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-    mediaRecorderRef.current = mediaRecorder
-    chunksRef.current = []
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      mediaRecorderRef.current = mediaRecorder
+      chunksRef.current = []
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
-    }
-
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop())
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      setTranscribing(true)
-
-      const formData = new FormData()
-      formData.append('audio', blob)
-
-      const res = await fetch('/api/voice/transcribe', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (res.ok) {
-        const { text } = await res.json()
-        onTranscript(text)
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
       }
-      setTranscribing(false)
-    }
 
-    mediaRecorder.start()
-    setRecording(true)
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setTranscribing(true)
+
+        try {
+          const formData = new FormData()
+          formData.append('audio', blob)
+
+          const res = await fetch('/api/voice/transcribe', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (res.ok) {
+            const { text } = await res.json()
+            onTranscript(text)
+          } else {
+            toast.error('Transcription failed. Please try again.')
+          }
+        } catch {
+          toast.error('Network error during transcription.')
+        }
+        setTranscribing(false)
+      }
+
+      mediaRecorder.start()
+      setRecording(true)
+    } catch {
+      toast.error('Microphone access denied. Check your browser permissions.')
+    }
   }
 
   function stopRecording() {
@@ -59,6 +70,7 @@ export function VoiceRecorder({ onTranscript }: VoiceRecorderProps) {
       size="sm"
       onClick={recording ? stopRecording : startRecording}
       disabled={transcribing}
+      aria-label={recording ? 'Stop recording' : transcribing ? 'Transcribing audio' : 'Start voice recording'}
       className="text-stone-400 hover:text-stone-600"
     >
       {transcribing ? (
@@ -69,7 +81,7 @@ export function VoiceRecorder({ onTranscript }: VoiceRecorderProps) {
           <span className="text-xs">Stop</span>
         </span>
       ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
           <line x1="12" x2="12" y1="19" y2="22"/>
