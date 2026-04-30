@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { fal } from '@fal-ai/client'
 import { buildPrompt } from '@/lib/artifact'
 
+export const maxDuration = 300
+
 let _anthropic: Anthropic | null = null
 function getAnthropic(): Anthropic {
   if (!_anthropic) _anthropic = new Anthropic()
@@ -55,6 +57,33 @@ async function generateImage(
   }
 }
 
+const ALLOWED_IMAGE_HOSTS = ['fal.media', 'storage.googleapis.com', 'fal.run', 'v3.fal.media']
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
+
+async function fetchImageSafely(url: string): Promise<Buffer | null> {
+  const parsed = new URL(url)
+  if (!ALLOWED_IMAGE_HOSTS.includes(parsed.hostname)) {
+    console.error('[image] blocked fetch to unexpected host:', parsed.hostname)
+    return null
+  }
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+  if (!res.ok) return null
+
+  const contentLength = res.headers.get('content-length')
+  if (contentLength && parseInt(contentLength) > MAX_IMAGE_BYTES) {
+    console.error('[image] response too large:', contentLength)
+    return null
+  }
+
+  const buf = Buffer.from(await res.arrayBuffer())
+  if (buf.length > MAX_IMAGE_BYTES) {
+    console.error('[image] buffer too large:', buf.length)
+    return null
+  }
+  return buf
+}
+
 async function uploadImage(supabase: Awaited<ReturnType<typeof createServiceClient>>, artifactId: string, sectionIndex: number, imageBuffer: Buffer): Promise<string | null> {
   const path = `${artifactId}/section-${sectionIndex}.png`
   const { error } = await supabase.storage
@@ -78,6 +107,12 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { container_id, medium, symbolic_language, coach_synthesis } = body
 
+  // Validate container_id
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!container_id || !uuidRe.test(container_id)) {
+    return NextResponse.json({ error: 'Invalid container_id' }, { status: 400 })
+  }
+
   // Get user profile
   const { data: profile } = await supabase
     .from('profiles')
@@ -85,7 +120,22 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .single()
 
-  const isCoach = profile?.role === 'coach' || profile?.role === 'admin'
+  if (!profile) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 })
+  }
+
+  const isCoach = profile.role === 'coach' || profile.role === 'admin'
+
+  // Verify user has access to this container (RLS enforces this, but check before burning API credits)
+  const { data: container } = await supabase
+    .from('containers')
+    .select('id')
+    .eq('id', container_id)
+    .single()
+
+  if (!container) {
+    return NextResponse.json({ error: 'Container not found or access denied' }, { status: 404 })
+  }
 
   // Get entries with author names
   const { data: entries } = await supabase
@@ -207,13 +257,12 @@ export async function POST(request: Request) {
     // Set hero reference for subsequent images
     if (!heroUrl) heroUrl = falUrl
 
-    // Download from fal and upload to Supabase storage
-    const imgRes = await fetch(falUrl)
-    if (!imgRes.ok) {
+    // Download from fal (with domain allowlist + size cap) and upload to Supabase storage
+    const imageBuffer = await fetchImageSafely(falUrl)
+    if (!imageBuffer) {
       imageUrls.push(null)
       continue
     }
-    const imageBuffer = Buffer.from(await imgRes.arrayBuffer())
     const url = await uploadImage(serviceClient, artifact.id, i, imageBuffer)
     imageUrls.push(url)
   }
@@ -229,10 +278,13 @@ export async function POST(request: Request) {
 
   // Update artifact with image URLs using service client (bypasses RLS)
   if (hasImages) {
-    await serviceClient
+    const { error: updateError } = await serviceClient
       .from('artifacts')
       .update({ content: artifactContent })
       .eq('id', artifact.id)
+    if (updateError) {
+      console.error('[artifact] failed to update with image URLs:', updateError.message)
+    }
   }
 
   return NextResponse.json({ ...artifact, content: artifactContent })

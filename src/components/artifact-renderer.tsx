@@ -3,10 +3,10 @@
 /* eslint-disable @next/next/no-img-element */
 import type { Artifact, ArtifactContent } from '@/lib/types'
 
-function SectionImage({ src, alt }: { src: string; alt: string }) {
+function SectionImage({ src, alt, compact }: { src: string; alt: string; compact?: boolean }) {
   return (
-    <div className="my-4 rounded-lg overflow-hidden">
-      <img src={src} alt={alt} className="w-full h-auto" />
+    <div className={`${compact ? 'mb-3 max-w-sm' : 'my-4'} rounded-lg overflow-hidden aspect-square bg-stone-100`}>
+      <img src={src} alt={alt} className="w-full h-full object-cover" loading="lazy" decoding="async" />
     </div>
   )
 }
@@ -136,9 +136,7 @@ function TimelineRenderer({ content }: { content: ArtifactContent }) {
             />
             <div className="text-xs text-stone-400 mb-1">{section.week_range}</div>
             {section.image_url && (
-              <div className="mb-3 rounded-lg overflow-hidden max-w-sm">
-                <img src={section.image_url} alt={section.visual_header || ''} className="w-full h-auto" />
-              </div>
+              <SectionImage src={section.image_url} alt={section.visual_header || `Node ${section.sequence}`} compact />
             )}
             {!section.image_url && section.visual_header && (
               <p className="text-sm italic text-stone-500 mb-2">{section.visual_header}</p>
