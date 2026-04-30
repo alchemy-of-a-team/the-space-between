@@ -57,12 +57,18 @@ async function generateImage(
   }
 }
 
-const ALLOWED_IMAGE_HOSTS = ['fal.media', 'storage.googleapis.com', 'fal.run', 'v3.fal.media']
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
+
+function isAllowedImageHost(hostname: string): boolean {
+  return hostname === 'storage.googleapis.com'
+    || hostname === 'fal.run'
+    || hostname.endsWith('.fal.media')
+    || hostname === 'fal.media'
+}
 
 async function fetchImageSafely(url: string): Promise<Buffer | null> {
   const parsed = new URL(url)
-  if (!ALLOWED_IMAGE_HOSTS.includes(parsed.hostname)) {
+  if (!isAllowedImageHost(parsed.hostname)) {
     console.error('[image] blocked fetch to unexpected host:', parsed.hostname)
     return null
   }
@@ -177,7 +183,7 @@ export async function POST(request: Request) {
 
   // Generate with Claude
   const message = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6-20250514',
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -210,7 +216,7 @@ export async function POST(request: Request) {
         reflection_count: reflections?.length || 0,
         engagement_weeks: 1,
         generated_at: new Date().toISOString(),
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6-20250514',
         prompt_version: '1.0',
       },
     }
