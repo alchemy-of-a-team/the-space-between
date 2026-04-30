@@ -17,7 +17,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const COACH_EMAIL = 'rich@thespacebetween.coach'
+const COACH_EMAIL = 'rich@thetisconsulting.com'
 const CLIENT_EMAIL = 'alex@example.com'
 const COACH_PASSWORD = process.env.SEED_COACH_PASSWORD || 'testpass123'
 const CLIENT_PASSWORD = process.env.SEED_CLIENT_PASSWORD || 'testpass123'
