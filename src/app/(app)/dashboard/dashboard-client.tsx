@@ -100,9 +100,7 @@ export function DashboardClient({ profile }: { profile: Profile }) {
           </h1>
           {isCoach && (
             <Dialog open={showNew} onOpenChange={setShowNew}>
-              <DialogTrigger>
-                <Button>Start a new engagement</Button>
-              </DialogTrigger>
+              <Button onClick={() => setShowNew(true)}>Start a new engagement</Button>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle className="font-serif">New engagement</DialogTitle>

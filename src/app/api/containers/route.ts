@@ -6,13 +6,8 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  let query = supabase
+  // RLS handles filtering -- coaches see own, clients see theirs
+  const { data, error } = await supabase
     .from('containers')
     .select(`
       *,
@@ -23,14 +18,12 @@ export async function GET() {
     `)
     .order('created_at', { ascending: false })
 
-  if (profile?.role === 'coach' || profile?.role === 'admin') {
-    query = query.eq('coach_id', user.id)
+  if (error) {
+    console.log('[containers] error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json(data)
+  return NextResponse.json(data || [])
 }
 
 export async function POST(request: Request) {

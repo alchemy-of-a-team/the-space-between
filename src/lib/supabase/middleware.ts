@@ -33,14 +33,18 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const pathname = request.nextUrl.pathname
+  console.log(`[middleware] ${pathname} | user: ${user?.id || 'none'} | cookies: ${request.cookies.getAll().map(c => c.name).join(', ')}`)
+
   // Public routes that don't require auth
   const publicRoutes = ['/', '/login', '/signup', '/signup/client', '/signup/complete', '/auth/callback']
-  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname === route)
-  const isInviteRoute = request.nextUrl.pathname.startsWith('/invite/')
-  const isApiWebhook = request.nextUrl.pathname === '/api/stripe/webhook'
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/auth/')
+  const isPublicRoute = publicRoutes.some(route => pathname === route)
+  const isInviteRoute = pathname.startsWith('/invite/')
+  const isApiWebhook = pathname === '/api/stripe/webhook'
+  const isAuthRoute = pathname.startsWith('/auth/')
 
   if (!user && !isPublicRoute && !isInviteRoute && !isApiWebhook && !isAuthRoute) {
+    console.log(`[middleware] REDIRECTING to /login from ${pathname}`)
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
