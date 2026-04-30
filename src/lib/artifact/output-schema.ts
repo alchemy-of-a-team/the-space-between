@@ -43,7 +43,7 @@ Return your response as valid JSON with this structure:
     "reflection_count": ${reflection_count},
     "engagement_weeks": ${weeks},
     "generated_at": "${new Date().toISOString()}",
-    "model": "claude-sonnet-4-6-20250514",
+    "model": "claude-sonnet-4-20250514",
     "prompt_version": "1.0"
   }
 }`
