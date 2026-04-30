@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { fal } from '@fal-ai/client'
 import { buildPrompt } from '@/lib/artifact'
 
 let _anthropic: Anthropic | null = null
@@ -9,54 +10,47 @@ function getAnthropic(): Anthropic {
   return _anthropic
 }
 
-async function generateImage(prompt: string, style: string): Promise<Buffer | null> {
-  try {
-    const artPrompt = `Create a fine art illustration in ${style} style. No text, no words, no letters. No photorealistic human faces. Abstract or symbolic figures only. The scene: ${prompt}`
+// Configure fal.ai client
+fal.config({ credentials: process.env.FAL_KEY })
 
-    const res = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: artPrompt,
-        n: 1,
-        size: '1024x1024',
-        response_format: 'b64_json',
-      }),
-    })
-    if (!res.ok) {
-      const errText = await res.text()
-      if (errText.includes('safety')) {
-        const retryRes = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'dall-e-3',
-            prompt: `Abstract ${style} fine art painting. Symbolic, evocative, no text, no faces. Moody atmospheric scene suggesting transformation and inner change.`,
-            n: 1,
-            size: '1024x1024',
-            response_format: 'b64_json',
-          }),
-        })
-        if (retryRes.ok) {
-          const retryJson = await retryRes.json()
-          const b64 = retryJson.data?.[0]?.b64_json
-          if (b64) return Buffer.from(b64, 'base64')
-        }
-      }
-      return null
+/**
+ * Generate an image using Flux Kontext Pro via fal.ai.
+ * If a referenceUrl is provided, Kontext uses it as a style reference
+ * so all images in the artifact share a consistent visual identity.
+ */
+async function generateImage(
+  prompt: string,
+  style: string,
+  referenceUrl?: string
+): Promise<string | null> {
+  try {
+    const artPrompt = `Fine art illustration in ${style} style. No text, no words, no letters. No photorealistic human faces. Symbolic, evocative figures. The scene: ${prompt}`
+
+    if (referenceUrl) {
+      // Use Kontext for style-consistent follow-up images
+      const result = await fal.subscribe('fal-ai/flux-pro/kontext', {
+        input: {
+          prompt: artPrompt,
+          image_url: referenceUrl,
+          num_images: 1,
+          output_format: 'png',
+        },
+      })
+      return (result.data as { images?: { url: string }[] })?.images?.[0]?.url ?? null
     }
-    const json = await res.json()
-    const b64 = json.data?.[0]?.b64_json
-    if (!b64) return null
-    return Buffer.from(b64, 'base64')
-  } catch {
+
+    // Hero image: use Flux 2 Pro for highest quality first image
+    const result = await fal.subscribe('fal-ai/flux-pro/v1.1', {
+      input: {
+        prompt: artPrompt,
+        num_images: 1,
+        image_size: 'square_hd',
+        output_format: 'png',
+      },
+    })
+    return (result.data as { images?: { url: string }[] })?.images?.[0]?.url ?? null
+  } catch (err) {
+    console.error('[image] generation error:', err)
     return null
   }
 }
@@ -189,22 +183,37 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Generate images for each section in parallel
+  // Generate images: hero image first, then style-consistent follow-ups via Kontext
   const serviceClient = await createServiceClient()
   const imageStyle = `${symbolic_language || 'minimalist'}, ${medium || 'artistic illustration'}`
-  // Generate images sequentially to avoid DALL-E rate limits
   const imageUrls: (string | null)[] = []
+  let heroUrl: string | null = null
+
   for (let i = 0; i < (artifactContent.sections || []).length; i++) {
     const section = artifactContent.sections[i]
     if (!section.visual_header) {
       imageUrls.push(null)
       continue
     }
-    const imageBuffer = await generateImage(section.visual_header, imageStyle)
-    if (!imageBuffer) {
+
+    // First image with a visual_header becomes the hero (no reference).
+    // Subsequent images use the hero as a style reference via Kontext.
+    const falUrl = await generateImage(section.visual_header, imageStyle, heroUrl ?? undefined)
+    if (!falUrl) {
       imageUrls.push(null)
       continue
     }
+
+    // Set hero reference for subsequent images
+    if (!heroUrl) heroUrl = falUrl
+
+    // Download from fal and upload to Supabase storage
+    const imgRes = await fetch(falUrl)
+    if (!imgRes.ok) {
+      imageUrls.push(null)
+      continue
+    }
+    const imageBuffer = Buffer.from(await imgRes.arrayBuffer())
     const url = await uploadImage(serviceClient, artifact.id, i, imageBuffer)
     imageUrls.push(url)
   }
@@ -220,11 +229,10 @@ export async function POST(request: Request) {
 
   // Update artifact with image URLs using service client (bypasses RLS)
   if (hasImages) {
-    const { error: updateError } = await serviceClient
+    await serviceClient
       .from('artifacts')
       .update({ content: artifactContent })
       .eq('id', artifact.id)
-    // updateError is silently ignored -- images are supplemental, not critical
   }
 
   return NextResponse.json({ ...artifact, content: artifactContent })
