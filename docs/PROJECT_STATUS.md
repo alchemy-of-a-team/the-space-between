@@ -1,7 +1,7 @@
 # The Space Between -- Project Status
 
-**Last updated:** 2026-04-29
-**Version:** 0.1.0
+**Last updated:** 2026-04-30
+**Version:** 0.1.1
 **Repo:** github.com/alchemy-of-a-team/the-space-between
 **Deploy:** https://the-space-between-production.up.railway.app
 **Supabase:** lwmvrndcafikvwaiphex
@@ -60,3 +60,12 @@ MVP deployed. Core functionality works: auth, shared space, reflections, artifac
 - Fixed: recursive RLS policies, button nesting hydration error, login redirect
 - Added DALL-E 3 image generation per artifact section
 - Fixed: image persistence (RLS update policy), safety filter workarounds
+
+### 2026-04-30: Team review + security hardening (v0.1.1)
+- 5-agent team review + contrarian second pass (17 findings fixed)
+- Security: RLS hardening (subscriptions, invites, profiles), role escalation prevention, invite lockdown
+- Frontend: Cormorant Garamond serif font, border-l-3 fix, console.log cleanup
+- UX: close engagement confirmation dialog, error feedback on all user actions, human-readable status labels
+- Accessibility: aria-labels, htmlFor/id linkage, billing button hidden from clients
+- Infrastructure: pre-push hooks (team review gate, railway-up block), security migration 00002
+- Pending: run migration 00002 on live Supabase DB
