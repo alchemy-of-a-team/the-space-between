@@ -49,6 +49,7 @@ export interface ArtifactSection {
   coach_margin_note: string | null
   quotes_used: string[]
   accent_color: string | null
+  image_url?: string | null
 }
 
 export interface ArtifactContent {

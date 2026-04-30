@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { buildPrompt } from '@/lib/artifact'
@@ -7,6 +7,51 @@ let _anthropic: Anthropic | null = null
 function getAnthropic(): Anthropic {
   if (!_anthropic) _anthropic = new Anthropic()
   return _anthropic
+}
+
+async function generateImage(prompt: string, style: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: `${style} style illustration: ${prompt}`,
+        n: 1,
+        size: '1024x1024',
+        response_format: 'b64_json',
+      }),
+    })
+    if (!res.ok) {
+      console.log('[image] DALL-E error:', await res.text())
+      return null
+    }
+    const json = await res.json()
+    const b64 = json.data?.[0]?.b64_json
+    if (!b64) return null
+    return Buffer.from(b64, 'base64')
+  } catch (e) {
+    console.log('[image] generation error:', e)
+    return null
+  }
+}
+
+async function uploadImage(supabase: Awaited<ReturnType<typeof createServiceClient>>, artifactId: string, sectionIndex: number, imageBuffer: Buffer): Promise<string | null> {
+  const path = `${artifactId}/section-${sectionIndex}.png`
+  const { error } = await supabase.storage
+    .from('artifact-images')
+    .upload(path, imageBuffer, { contentType: 'image/png', upsert: true })
+
+  if (error) {
+    console.log('[image] upload error:', error.message)
+    return null
+  }
+
+  const { data } = supabase.storage.from('artifact-images').getPublicUrl(path)
+  return data.publicUrl
 }
 
 export async function POST(request: Request) {
@@ -92,7 +137,7 @@ export async function POST(request: Request) {
       medium: medium || 'prose',
       symbolic_language: symbolic_language || 'minimalist',
       coach_synthesis: coach_synthesis || '',
-      sections: [{ sequence: 1, week_range: 'Full engagement', visual_header: '', body: responseText, coach_margin_note: null, quotes_used: [], accent_color: null }],
+      sections: [{ sequence: 1, week_range: 'Full engagement', visual_header: '', body: responseText, coach_margin_note: null, quotes_used: [], accent_color: null, image_url: null }],
       closing: null,
       metadata: {
         entry_count: entries.length,
@@ -105,7 +150,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Store the artifact
+  // Store artifact first to get the ID
   const { data: artifact, error } = await supabase
     .from('artifacts')
     .insert({
@@ -121,5 +166,36 @@ export async function POST(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(artifact)
+
+  // Generate images for each section in parallel
+  const serviceClient = await createServiceClient()
+  const imageStyle = `${symbolic_language || 'minimalist'}, ${medium || 'artistic illustration'}`
+
+  const imagePromises = (artifactContent.sections || []).map(async (section: { visual_header?: string }, i: number) => {
+    if (!section.visual_header) return null
+    const imageBuffer = await generateImage(section.visual_header, imageStyle)
+    if (!imageBuffer) return null
+    return uploadImage(serviceClient, artifact.id, i, imageBuffer)
+  })
+
+  const imageUrls = await Promise.all(imagePromises)
+
+  // Update sections with image URLs
+  let hasImages = false
+  for (let i = 0; i < (artifactContent.sections || []).length; i++) {
+    if (imageUrls[i]) {
+      artifactContent.sections[i].image_url = imageUrls[i]
+      hasImages = true
+    }
+  }
+
+  // Update artifact with image URLs if any were generated
+  if (hasImages) {
+    await supabase
+      .from('artifacts')
+      .update({ content: artifactContent })
+      .eq('id', artifact.id)
+  }
+
+  return NextResponse.json({ ...artifact, content: artifactContent })
 }
