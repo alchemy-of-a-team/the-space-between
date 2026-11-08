@@ -1,3 +1,9 @@
+# The Space Between (ARCHIVED 2026-11-08)
+
+**This repository is archived and read-only.** The Space Between was a shared writing space between a coach and a client, built April 29-30, 2026, and parked May 9, 2026. On 2026-11-08 its founders collapsed what was worth keeping into their next product, Project Ticonderoga, and archived the rest. The code here is reference for that product's 2027 build and is not maintained.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

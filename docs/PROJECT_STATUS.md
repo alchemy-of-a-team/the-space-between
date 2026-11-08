@@ -1,5 +1,7 @@
 # The Space Between -- Project Status
 
+**ARCHIVED 2026-11-08.** Collapsed into Project Ticonderoga; this repo is read-only reference.
+
 **Last updated:** 2026-04-30
 **Version:** 0.1.1
 **Repo:** github.com/alchemy-of-a-team/the-space-between
@@ -13,8 +15,7 @@ MVP deployed. Core functionality works: auth, shared space, reflections, artifac
 ## What Works
 
 - Landing page with product thesis and $125/mo pricing
-- Coach login (rich@thetisconsulting.com / testpass123)
-- Client login (alex@example.com / testpass123)
+- Coach and client seed logins (seed credentials removed from this public document 2026-11-08; see the seed script)
 - Dashboard (practice view for coaches, engagement list for clients)
 - Shared space with compound question pinned, chronological entries
 - Post-session coach reflections (three fields, voice via Whisper)
